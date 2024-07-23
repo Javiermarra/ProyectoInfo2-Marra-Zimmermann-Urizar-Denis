@@ -1,0 +1,137 @@
+#include <Keypad.h>
+
+const byte filas = 4; 
+const byte columnas = 4; 
+char keys[filas][columnas] = {    
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+
+byte pinfilas[filas]={11,10,9,8};
+byte pincolumnas[columnas]={7,6,5,4};
+
+Keypad teclado = Keypad(makeKeymap(keys), pinfilas, pincolumnas,filas,columnas);
+char teclas1;
+char teclas2;
+char teclas3;
+String clavemaestra = "123456";
+const int maximo = 4;
+String claves[maximo];
+int numdecontras = 0;
+String contras = "";
+byte indice = 0; 
+
+bool check(String contrasenia){
+  for (int i=0; i < numdecontras; i++){
+    if (claves[i] == contrasenia){
+      return true;
+      }
+    }
+      return false;
+  }
+
+
+void agregar(){
+      if (numdecontras < 4){
+      String nuevacontra = "";
+      Serial.print("ingrese nueva contraseña: ");
+       while (nuevacontra.length() < 6) {
+       char teclas2 = teclado.getKey();
+       if (teclas2) {
+        nuevacontra += teclas2;
+        Serial.print(teclas2);
+         }
+        } 
+       claves[numdecontras] = nuevacontra;
+       numdecontras++;
+       Serial.println();
+       Serial.println("contraseña agregada");
+      }
+      else{
+        Serial.println("No hay espacio para más contraseñas");
+        }
+}
+
+void eliminar(){
+  String eliminarcontra = "";
+  Serial.print("Introduzca la contraseña que quiere eliminar: ");
+  while(eliminarcontra.length() < 6){
+    char teclas3 = teclado.getKey();
+    if (teclas3){
+      eliminarcontra += teclas3;
+      Serial.print(teclas3);
+    }
+  }
+  for (int i=0; i < numdecontras; i++){
+    if (claves[i] == eliminarcontra){
+      for (int j=0;j < numdecontras -1; j++){
+        claves[j] = claves[j+1];
+      }
+      claves[numdecontras - 1]= "";
+      numdecontras--;
+      Serial.println();
+      Serial.println("Contraseña eliminada");
+      return;  
+    }
+  }
+  Serial.println("contraseña no encontrada");
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial.print("ingrese clave: ");
+}
+void loop() {
+  
+  teclas1=teclado.getKey();
+  if (teclas1){
+  if (teclas1 == 'A'){
+  if (contras.length() == 6){  
+  if(contras == clavemaestra){
+     Serial.println();
+     Serial.println("Bienvenido clave maestra");
+     Serial.println("Presione 1 si quiere agregar una clave");
+     Serial.println("Presione 2 si quiere borrar una clave");
+       while (true){
+      char opcion=teclado.getKey();
+      if (opcion == '1'){
+        agregar();
+        Serial.print("ingrese clave: ");
+        break;
+        }
+      if (opcion == '2'){
+        eliminar();
+        Serial.print("ingrese clave: ");
+        break;
+        }
+      }
+    }
+    else if (check(contras)){
+    Serial.println();
+    Serial.println("contraseña correcta");
+    Serial.println("ingrese clave: ");
+      }
+    else{
+    Serial.println();
+    Serial.println("contraseña incorrecta ");
+    Serial.println("ingrese clave: ");
+    }
+  }
+   else {
+    Serial.println(" La contraseña debe tener 6 dígitos"); 
+    Serial.println("ingrese clave: ");
+   }
+   contras = "";
+  } 
+  else if (teclas1 == 'D'){
+    Serial.println("  contraseña reiniciada");
+    Serial.println("ingrese clave: ");
+  }
+    else{
+      contras += teclas1;
+      Serial.print(teclas1);
+      }
+    }
+  }
