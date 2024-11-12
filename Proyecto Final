@@ -1,0 +1,224 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <SPI.h>
+#include <SD.h>
+#include <string.h>
+#include <Wire.h>    // incluye libreria para interfaz I2C
+#include <RTClib.h>   // incluye libreria para el manejo del modulo RTC
+#define RST_PIN         9         
+#define SS_PIN          10 
+RTC_DS3231 rtc;
+File myFile;
+File Archivo;
+ class USUARIO {
+   protected:
+    String nombre;
+    byte tarjeta[4];
+    char contrasenia[10];
+   public:
+   USUARIO(){
+    }
+    void guardar_usuario(){
+
+  myFile = SD.open("usuarios.dat", FILE_WRITE);
+  
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.write((const uint8_t *)this, sizeof(USUARIO));
+    // close the file:
+    myFile.close();
+    Serial.println("DATOS GUARDADOS.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error abriendo archivo");
+  }
+      }
+   void leer_usuario(){
+  myFile = SD.open("usuarios.dat", FILE_READ);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.read((const uint8_t *)this, sizeof(USUARIO));
+    // close the file:
+    myFile.close();
+    Serial.println(" Datos leidos.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error abriendo archivo");
+  }
+    
+    }
+   void set_tarjeta(byte tarjeta[4]){
+     for(byte i=0;i<4;i++){
+       this->tarjeta[i]=tarjeta[i];
+      }
+      guardar_usuario();
+    }
+   byte* get_tarjeta(){
+    return tarjeta;
+    }
+    void get_nombre() {
+      Serial.print("Bienvenido ");
+      Serial.println(nombre);
+    }
+    void asignar_nombre() {
+  Serial.print("Ingrese el nombre para el usuario: ");
+  
+  while (!Serial.available());
+  String nuevo_nombre = Serial.readStringUntil('\n');
+  nuevo_nombre.trim();  // Elimina espacios adicionales
+  nombre=nuevo_nombre;
+    }
+  void guardar_registro(){
+  Archivo=SD.open("registro.txt", FILE_WRITE);
+  Archivo.print("Ingresó ");
+  Archivo.println(nombre);
+  
+  DateTime fecha = rtc.now();
+  Archivo.print(fecha.day());
+  Archivo.print("/");
+  Archivo.print(fecha.month());
+  Archivo.print("/");
+  Archivo.print(fecha.year());
+  Archivo.print(" ");
+  Archivo.print(fecha.hour());
+  Archivo.print(":");
+  Archivo.print(fecha.minute());
+  Archivo.print(":");
+  Archivo.println(fecha.second());
+  }
+};
+
+USUARIO uno, dos, tres; //creacion de usuarios
+MFRC522 mfrc522(SS_PIN, RST_PIN);  
+byte LecturaUID[4];
+byte Admin[4]={0xFC, 0x12, 0xFC, 0x38};
+uint8_t serial[1];
+int n;
+
+
+void TARJETA() {
+  if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+for(byte i=0;i<mfrc522.uid.size;i++){
+  LecturaUID[i]=mfrc522.uid.uidByte[i];
+}
+  if(ComparaUID(LecturaUID,Admin)){
+    Serial.println("Ingrese Usuario a cargar"); 
+    while(!Serial.available());
+    n=Serial.readBytes(serial,1);
+    if(n==1){
+    switch(serial[0]){
+      case '1':
+        if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+      for(byte i=0;i<mfrc522.uid.size;i++){
+       LecturaUID[i]=mfrc522.uid.uidByte[i];
+      }
+      uno.set_tarjeta(LecturaUID);
+      break;
+      case '2':
+      if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+      for(byte i=0;i<mfrc522.uid.size;i++){
+       LecturaUID[i]=mfrc522.uid.uidByte[i];
+      }
+      dos.set_tarjeta(LecturaUID);
+      break;
+      case '3':
+      if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+      for(byte i=0;i<mfrc522.uid.size;i++){
+       LecturaUID[i]=mfrc522.uid.uidByte[i];
+      }
+      tres.set_tarjeta(LecturaUID);
+      break;
+      
+    }
+  }
+  }
+if(ComparaUID(LecturaUID,Admin)){
+    Serial.println("Bienvenido admin");//lcd
+    
+}
+ else if(ComparaUID(LecturaUID,uno.get_tarjeta())){
+    uno.get_nombre();
+    muestra_fecha_hora();
+    uno.guardar_registro();
+    
+  }
+   else if(ComparaUID(LecturaUID,dos.get_tarjeta())){
+    dos.get_nombre();
+    muestra_fecha_hora();
+    dos.guardar_registro();
+  }
+    else if(ComparaUID(LecturaUID,tres.get_tarjeta())){
+    tres.get_nombre();
+    muestra_fecha_hora();
+    tres.guardar_registro();
+  }
+  else{
+    Serial.println("No registrado");
+  }
+  mfrc522.PICC_HaltA();
+}
+boolean ComparaUID(byte Lectura[],byte Usuario[]){
+for(byte i=0;i<mfrc522.uid.size;i++){
+  if(Lectura[i]!=Usuario[i]){
+    return (false);
+  }
+}
+return (true);
+}
+void muestra_fecha_hora() {
+  DateTime fecha = rtc.now();
+  Serial.print(fecha.day());
+  Serial.print("/");
+  Serial.print(fecha.month());
+  Serial.print("/");
+  Serial.print(fecha.year());
+  Serial.print(" ");
+  Serial.print(fecha.hour());
+  Serial.print(":");
+  Serial.print(fecha.minute());
+  Serial.print(":");
+  Serial.println(fecha.second());
+  
+}
+
+
+
+void setup() {
+  uno.leer_usuario();
+  Serial.begin(9600);   
+  SPI.begin();      
+  mfrc522.PCD_Init();   
+  if (! rtc.begin()) {        // si falla la inicializacion del modulo
+ Serial.println("Modulo RTC no encontrado !");  // muestra mensaje de error
+ while (1);         // bucle infinito que detiene ejecucion del programa
+ }
+       if (!SD.begin(4)) {
+    Serial.println("inicializacion fallo!");
+    while (1);
+  }
+}
+void loop(){
+  TARJETA();
+}
