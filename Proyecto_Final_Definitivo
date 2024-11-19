@@ -1,0 +1,269 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <SD.h>
+#include <RTClib.h>
+#include <EEPROM.h> // Biblioteca para usar EEPROM
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd (0x27, 2, 1, 0, 4, 5, 6, 7);
+#define RST_PIN 9        // Pin RST del RFID
+#define SS_PIN 10        // Pin SS del RFID
+#define SD_PIN 4         // Pin CS de la tarjeta SD
+
+RTC_DS3231 rtc;
+
+File Archivo;
+MFRC522 mfrc522(SS_PIN, RST_PIN);  
+byte LecturaUID[4];
+byte Admin[4] = {0xFC, 0x12, 0xFC, 0x38};
+
+// Clase para gestionar usuarios
+class USUARIO {
+private:
+    String nombre;
+    byte tarjeta[4];
+    int eeprom_address; // Dirección base en EEPROM para el usuario
+
+public:
+    // Constructor
+    USUARIO(byte tarjeta[4], int address) {
+        for (byte i = 0; i < 4; i++) {
+            this->tarjeta[i] = tarjeta[i];
+        }
+        eeprom_address = address;
+    }
+
+    byte* get_tarjeta() {
+        return tarjeta;
+    }
+
+    void asignar_nombre() {
+        Serial.println("Ingrese el nombre para el usuario y presione Enter: ");
+
+        // Esperar a que el usuario comience a escribir
+        while (!Serial.available()) {
+            delay(100);
+        }
+
+        // Capturar el nombre ingresado
+        char buffer[50]; // Tamaño máximo del nombre
+        int longitud = Serial.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
+        buffer[longitud] = '\0'; // Agregar el terminador de cadena
+
+        // Convertir el buffer a String y eliminar espacios adicionales
+        String nuevo_nombre = String(buffer);
+        nuevo_nombre.trim();
+
+        if (nuevo_nombre.length() > 0) {
+            nombre = nuevo_nombre;
+            guardar_en_eeprom(); // Guardar en EEPROM
+            Serial.print("Nombre guardado: ");
+            Serial.println(nombre);
+        } else {
+            Serial.println("Error: Nombre no válido. Inténtelo de nuevo.");
+        }
+    }
+
+    String get_nombre() {
+        return nombre;
+    }
+
+    // Guardar el nombre en EEPROM
+    void guardar_en_eeprom() {
+        int addr = eeprom_address;
+        for (size_t i = 0; i < nombre.length(); i++) {
+            EEPROM.write(addr++, nombre[i]);
+        }
+        EEPROM.write(addr, '\0'); // Fin de la cadena
+    }
+
+    // Leer el nombre desde EEPROM
+    void cargar_de_eeprom() {
+        int addr = eeprom_address;
+        char buffer[50];
+        int i = 0;
+
+        while (i < sizeof(buffer) - 1) {
+            char c = EEPROM.read(addr++);
+            if (c == '\0') break; // Fin de la cadena
+            buffer[i++] = c;
+        }
+        buffer[i] = '\0'; // Agregar terminador
+        nombre = String(buffer);
+    }
+
+    void guardar_registro() {
+        digitalWrite(SD_PIN, LOW); // Activar tarjeta SD
+        Archivo = SD.open("registro.txt", FILE_WRITE);
+        if (Archivo) {
+            Archivo.print("Ingreso ");
+            Archivo.println(nombre);
+
+            DateTime fecha = rtc.now();
+            Archivo.print(fecha.day());
+            Archivo.print("/");
+            Archivo.print(fecha.month());
+            Archivo.print("/");
+            Archivo.print(fecha.year());
+            Archivo.print(" ");
+            Archivo.print(fecha.hour());
+            Archivo.print(":");
+            Archivo.print(fecha.minute());
+            Archivo.print(":");
+            Archivo.println(fecha.second());
+
+            Archivo.close();
+        } else {
+            Serial.println("Error: No se pudo abrir registro.txt.");
+        }
+        digitalWrite(SD_PIN, HIGH); // Desactivar tarjeta SD
+    }
+};
+
+// Crear usuarios con direcciones específicas en EEPROM
+byte tarjetaUno[] = {0xC7, 0xB7, 0xCB, 0xD7};
+byte tarjetaDos[] = {0xC5, 0xFB, 0x26, 0xA1};
+byte tarjetaTres[] = {0x43, 0xB, 0xF1, 0x16};
+
+USUARIO uno(tarjetaUno, 0);       // Usuario 1 empieza en dirección 0
+USUARIO dos(tarjetaDos, 50);      // Usuario 2 empieza en dirección 50
+USUARIO tres(tarjetaTres, 100);   // Usuario 3 empieza en dirección 100
+void ABRIR(){
+  digitalWrite(7, HIGH);
+  delay(5000);
+  digitalWrite(7, LOW);
+  lcd.clear();
+}
+void TARJETA() {
+    if (!mfrc522.PICC_IsNewCardPresent()) return;
+    if (!mfrc522.PICC_ReadCardSerial()) return;
+
+    //Serial.print("Leyendo UID: ");
+    for (byte i = 0; i < mfrc522.uid.size; i++) {
+        LecturaUID[i] = mfrc522.uid.uidByte[i];
+       // Serial.print(LecturaUID[i], HEX);
+      //  if (i < mfrc522.uid.size - 1) Serial.print(":");
+    }
+   // Serial.println();
+
+    if (ComparaUID(LecturaUID, Admin)) {
+        Serial.println("Bienvenido Admin. Ingrese el usuario a cargar (1, 2 o 3):");
+        while (!Serial.available());
+        char opcion = Serial.read();
+        while (Serial.available()) Serial.read();
+
+        switch (opcion) {
+            case '1':
+                uno.asignar_nombre();
+                break;
+            case '2':
+                dos.asignar_nombre();
+                break;
+            case '3':
+                tres.asignar_nombre();
+                break;
+            default:
+                Serial.println("Opción inválida.");
+                break;
+        }
+    } else if (ComparaUID(LecturaUID, uno.get_tarjeta())) {
+        Serial.print("Bienvenido ");
+        Serial.println(uno.get_nombre());
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Bienvenido");
+        lcd.setCursor(0, 1);
+        lcd.print(uno.get_nombre());
+        muestra_fecha_hora();
+        uno.guardar_registro();
+        ABRIR();
+    } else if (ComparaUID(LecturaUID, dos.get_tarjeta())) {
+        Serial.print("Bienvenido ");
+        Serial.println(dos.get_nombre());
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Bienvenido");
+        lcd.setCursor(0, 1);
+        lcd.print(dos.get_nombre());
+        muestra_fecha_hora();
+        dos.guardar_registro();
+        ABRIR();
+    } else if (ComparaUID(LecturaUID, tres.get_tarjeta())) {
+        Serial.print("Bienvenido ");
+        Serial.println(tres.get_nombre());
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Bienvenido");
+        lcd.setCursor(0, 1);
+        lcd.print(tres.get_nombre());
+        muestra_fecha_hora();
+        tres.guardar_registro();
+        ABRIR();
+    } else {
+        Serial.println("Tarjeta no registrada.");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("No registrado");
+        delay(2000);
+        lcd.clear();
+    }
+
+    mfrc522.PICC_HaltA();
+}
+
+void muestra_fecha_hora() {
+    DateTime fecha = rtc.now();
+    Serial.print("Fecha: ");
+    Serial.print(fecha.day());
+    Serial.print("/");
+    Serial.print(fecha.month());
+    Serial.print("/");
+    Serial.print(fecha.year());
+    Serial.print(" Hora: ");
+    Serial.print(fecha.hour());
+    Serial.print(":");
+    Serial.print(fecha.minute());
+    Serial.print(":");
+    Serial.println(fecha.second());
+}
+
+boolean ComparaUID(byte Lectura[], byte Usuario[]) {
+    for (byte i = 0; i < 4; i++) {
+        if (Lectura[i] != Usuario[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void setup() {
+    lcd.setBacklightPin(3, POSITIVE);
+    lcd.setBacklight(HIGH);
+    lcd.begin(16, 2);
+    lcd.clear();
+    SPI.begin();
+    Serial.begin(9600);
+
+    mfrc522.PCD_Init();
+    Serial.println("Módulo RFID inicializado.");
+
+    if (!rtc.begin()) {
+        Serial.println("Error: Módulo RTC no encontrado.");
+        while (1);
+    }
+
+    if (!SD.begin(SD_PIN)) {
+        Serial.println("Error: Inicialización de tarjeta SD falló.");
+        while (1);
+    }
+
+    // Cargar nombres desde EEPROM
+    uno.cargar_de_eeprom();
+    dos.cargar_de_eeprom();
+    tres.cargar_de_eeprom();
+    pinMode(7, OUTPUT);
+    Serial.println("Todos los dispositivos inicializados correctamente.");
+}
+
+void loop() {
+    TARJETA();
+}
